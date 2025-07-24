@@ -1,9 +1,11 @@
   import 'package:flutter/material.dart';
-  import '../db/user_database.dart';
+  import '../services/api_service.dart';
   import 'settings_profile/notification_screen.dart';
   import 'profile_screen.dart';
   import 'teacher_screen.dart';
   import 'create_exam_screen.dart';
+  import 'dart:convert';
+  import 'package:http/http.dart' as http;
 
   class QuestionModel {
     final int id;
@@ -50,9 +52,8 @@
     final _optionCController = TextEditingController();
     final _optionDController = TextEditingController();
     final _bulkPasteController = TextEditingController();
-
     String? _correctAnswer = 'A';
-    final List<QuestionModel> _questions = [];
+    List<QuestionModel> _questions = [];
     int? _editingQuestionId;
 
     final bool isLoggedIn = true;
@@ -61,22 +62,22 @@
     @override
     void initState() {
       super.initState();
-      _loadQuestionsFromDatabase();
+      _loadQuestionsFromApi();
     }
 
-    Future<void> _loadQuestionsFromDatabase() async {
-      final questions = await AppDatabase.getQuestionsByExamId(widget.examId);
+    Future<void> _loadQuestionsFromApi() async {
+      final questions = await ApiService.getQuestionsByExamId(widget.examId);
+      List<QuestionModel> loadedQuestions = [];
 
       for (var q in questions) {
-        final answers = await AppDatabase.getAnswersByQuestionId(q['id']);
-
+        final answers = await ApiService.getAnswersByQuestionId(q['id']);
         final answerMap = {
           for (var a in answers) a['answerLabel']: a['answerText']
         };
-        final correct = answers.firstWhere((a) => a['isCorrect'] == 1)['answerLabel'];
+        final correct = answers.firstWhere((a) => a['isCorrect'] == true)['answerLabel'];
 
-        setState(() {
-          _questions.add(QuestionModel(
+        loadedQuestions.add(
+          QuestionModel(
             id: q['id'],
             question: q['questionText'],
             optionA: answerMap['A'] ?? '',
@@ -84,10 +85,29 @@
             optionC: answerMap['C'] ?? '',
             optionD: answerMap['D'] ?? '',
             correctAnswer: correct,
-          ));
-        });
+          ),
+        );
       }
+
+      setState(() {
+        _questions = loadedQuestions;
+      });
     }
+
+    Future<void> bulkAddQuestions(List<QuestionModel> questions) async {
+      for (var q in questions) {
+        await _addOrUpdateQuestionFromBulk(q);
+      }
+
+      // ✅ Load lại danh sách sau khi thêm xong
+      await _loadQuestionsFromApi();
+
+      // ✅ Hiện thông báo thành công (nếu muốn)
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Đã thêm ${questions.length} câu hỏi từ Excel')),
+      );
+    }
+
 
     void _editQuestion(QuestionModel question) {
       setState(() {
@@ -113,7 +133,7 @@
         final correct = _correctAnswer ?? 'A';
 
         if (_editingQuestionId != null) {
-          await AppDatabase.updateQuestion(
+          await ApiService.updateQuestion(
             questionId: _editingQuestionId!,
             questionText: questionText,
             answers: answers,
@@ -155,12 +175,13 @@
 
           );
         } else {
-          final questionId = await AppDatabase.insertQuestionWithAnswers(
+          final questionId = await ApiService.insertQuestionWithAnswers(
             examId: widget.examId,
             questionText: questionText,
             answers: answers,
             correctAnswer: correct,
-          );
+
+      );
 
           setState(() {
             _questions.add(QuestionModel(
@@ -213,7 +234,7 @@
       );
 
       if (confirmed == true) {
-        await AppDatabase.deleteQuestion(question.id);
+        await ApiService.deleteQuestion(question.id);
         setState(() {
           _questions.removeWhere((q) => q.id == question.id);
         });
@@ -241,10 +262,13 @@
       }
     }
 
-    void _parseAndAddStructuredQuestions() {
-      final text = _bulkPasteController.text.trim();
-      final lines = text.split('\n').map((e) => e.trim()).toList();
+    void _parseAndAddStructuredQuestions() async {
+      print("🟢 Bắt đầu xử lý thêm nhiều câu hỏi");
 
+      final text = _bulkPasteController.text.trim();
+      print("📥 Văn bản được nhập:\n$text");
+
+      final lines = text.split('\n').map((e) => e.trim()).toList();
       List<QuestionModel> newQuestions = [];
       List<String> buffer = [];
 
@@ -262,27 +286,52 @@
           final correctAnswer = buffer[5].split(':').last.trim().toUpperCase();
           final questionText = questionLine.replaceFirst(RegExp(r'^\\d+\\.\\s*'), '');
 
-          newQuestions.add(
-            QuestionModel(
-              id: 0,
-              question: questionText,
-              optionA: optionA,
-              optionB: optionB,
-              optionC: optionC,
-              optionD: optionD,
-              correctAnswer: correctAnswer,
-            ),
+          final question = QuestionModel(
+            id: 0,
+            question: questionText,
+            optionA: optionA,
+            optionB: optionB,
+            optionC: optionC,
+            optionD: optionD,
+            correctAnswer: correctAnswer,
           );
+
+          newQuestions.add(question);
+          print("✅ Đã phân tích: ${question.question} | Đáp án đúng: ${question.correctAnswer}");
 
           buffer.clear();
         }
       }
 
+      /// 🛠️ Sử dụng Future.wait để đợi tất cả thêm xong
+      List<QuestionModel> addedQuestions = [];
+
       for (var q in newQuestions) {
-        _addOrUpdateQuestionFromBulk(q);
+        final id = await ApiService.insertQuestionWithAnswers(
+          examId: widget.examId,
+          questionText: q.question,
+          answers: {
+            'A': q.optionA,
+            'B': q.optionB,
+            'C': q.optionC,
+            'D': q.optionD,
+          },
+          correctAnswer: q.correctAnswer,
+        );
+        addedQuestions.add(QuestionModel(
+          id: id,
+          question: q.question,
+          optionA: q.optionA,
+          optionB: q.optionB,
+          optionC: q.optionC,
+          optionD: q.optionD,
+          correctAnswer: q.correctAnswer,
+        ));
       }
 
+      /// 🟢 Cập nhật danh sách câu hỏi 1 lần duy nhất
       setState(() {
+        _questions.addAll(addedQuestions);
         _bulkPasteController.clear();
       });
 
@@ -295,7 +344,7 @@
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  "Đã thêm ${newQuestions.length} câu hỏi từ văn bản",
+                  "Đã thêm ${addedQuestions.length} câu hỏi từ văn bản",
                   style: const TextStyle(color: Colors.black87),
                 ),
               ),
@@ -307,9 +356,11 @@
           margin: const EdgeInsets.all(16),
         ),
       );
-}
+    }
 
-      Future<void> _addOrUpdateQuestionFromBulk(QuestionModel q) async {
+
+
+    Future<void> _addOrUpdateQuestionFromBulk(QuestionModel q) async {
       final answers = {
         'A': q.optionA,
         'B': q.optionB,
@@ -317,7 +368,7 @@
         'D': q.optionD,
       };
 
-      final id = await AppDatabase.insertQuestionWithAnswers(
+      final id = await ApiService.insertQuestionWithAnswers(
         examId: widget.examId,
         questionText: q.question,
         answers: answers,
@@ -513,6 +564,8 @@
                   onPressed: () {
                     if (_formKey.currentState!.validate()) {
                       _parseAndAddStructuredQuestions();
+                    } else {
+                      print("Form chưa hợp lệ");
                     }
                   },
 
