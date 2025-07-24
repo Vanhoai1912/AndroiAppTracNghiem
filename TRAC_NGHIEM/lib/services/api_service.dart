@@ -28,13 +28,14 @@ class ApiService {
     required Map<String, String> answers,
     required String correctAnswer,
   }) async {
-    final url = Uri.parse('$baseUrl/api/questions/with-answers');
+    final url = Uri.parse('$baseUrl/questions');
+
     final response = await http.post(
       url,
       headers: {'Content-Type': 'application/json'},
       body: jsonEncode({
         'examId': examId,
-        'question': questionText,
+        'questionText': questionText, // ✅ chứ không phải 'question'
         'answers': answers,
         'correctAnswer': correctAnswer,
       }),
@@ -44,11 +45,18 @@ class ApiService {
 
     if (response.statusCode == 200) {
       final data = jsonDecode(response.body);
-      // ⚠️ Nếu data là int thì trả về luôn, còn nếu là map thì mới gọi ["questionId"]
-      if (data is int) return data;
-      if (data is Map<String, dynamic> && data.containsKey('questionId')) {
-        return data["questionId"];
+
+      if (data is int) {
+        return data; // ✅ đúng với backend hiện tại
       }
+
+// Trường hợp backend trả kiểu map
+      if (data is Map<String, dynamic>) {
+        if (data.containsKey('questionId')) return data["questionId"];
+      }
+
+      throw Exception("❌ Phản hồi không hợp lệ: $data");
+
       throw Exception("❌ Phản hồi không hợp lệ: $data");
     } else {
       throw Exception("❌ Lỗi khi thêm câu hỏi: ${response.body}");

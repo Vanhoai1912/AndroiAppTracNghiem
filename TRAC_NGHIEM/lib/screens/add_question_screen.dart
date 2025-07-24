@@ -181,7 +181,9 @@
             answers: answers,
             correctAnswer: correct,
 
-      );
+
+          );
+          await _loadQuestionsFromApi();
 
           setState(() {
             _questions.add(QuestionModel(
@@ -368,6 +370,7 @@
         'D': q.optionD,
       };
 
+      // ❗ Trả về int trực tiếp
       final id = await ApiService.insertQuestionWithAnswers(
         examId: widget.examId,
         questionText: q.question,
@@ -375,9 +378,10 @@
         correctAnswer: q.correctAnswer,
       );
 
+      // ✅ Không xử lý id như map nữa, vì nó là int
       setState(() {
         _questions.add(QuestionModel(
-          id: id,
+          id: id, // ← dùng trực tiếp int
           question: q.question,
           optionA: q.optionA,
           optionB: q.optionB,
@@ -387,6 +391,7 @@
         ));
       });
     }
+
 
     void _finishExam() {
       const message = 'Bài thi đã được lưu thành công!';
