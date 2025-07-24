@@ -4,11 +4,11 @@ import 'home_screen.dart';
 import 'register_screen.dart';
 import 'teacher_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../db/user_database.dart';
 import '../utils/user_prefs.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:math' as math;
-
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -31,8 +31,53 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
   late final AnimationController _tiltController;
   late final AnimationController _faceIdController;
   late final Animation<double> _faceIdFadeAnimation;
+  Future<Map<String, dynamic>?> login(String email, String password) async {
+    final url = Uri.parse("http://172.16.1.243:5162/auth/login");
 
-  // Khai báo biến ở đầu State:
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({"email": email, "password": password}),
+    );
+
+    if (response.statusCode == 200) {
+      final prefs = await SharedPreferences.getInstance();
+
+      // Kiểm tra dữ liệu trả về từ response
+      final data = json.decode(response.body);
+      final user = data; // hoặc data['user'] nếu API của bạn bọc dữ liệu trong 'user'
+
+      // Lưu fullName
+      final fullName = user['fullName'];
+      if (fullName != null && fullName is String) {
+        await prefs.setString('username', fullName);
+      }
+
+      // Lưu email
+      final email = user['email'];
+      if (email != null && email is String) {
+        await prefs.setString('email', email);
+      }
+
+      // Lưu role
+      final role = user['role'];
+      if (role != null && role is String) {
+        await prefs.setString('role', role);
+      }
+
+      // Lưu userId
+      final userId = user['id'];
+      if (userId != null && userId is int) {
+        await prefs.setInt('userId', userId);
+      }
+
+      return data;
+    } else {
+      return null;
+    }
+  }
+
+    // Khai báo biến ở đầu State:
   bool isBusiness = false;
   final TextEditingController domainController = TextEditingController();
 
@@ -267,36 +312,43 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                               final email = emailController.text.trim();
                               final password = passwordController.text.trim();
 
-                              final user = await AppDatabase.getUser(email, password);
+                              final user = await login(email, password);
 
                               if (user != null) {
                                 await UserPrefs.saveUserData(
-                                    user['fullName'],
-                                    user['email'],
-                                    user['role'],
-                                    user['createdAt'] ?? ''
+                                  user['fullName'] ?? '',
+                                  user['email'] ?? '',
+                                  user['role'] ?? '',
+                                  user['createdAt'] ?? '',
                                 );
+
+                                // ✅ Thêm đoạn này để lưu userId và tên vào SharedPreferences
+                                final prefs = await SharedPreferences.getInstance();
+                                await prefs.setInt('userId', user['id']); // hoặc user['userId'] nếu API trả vậy
+                                await prefs.setString('username', user['fullName'] ?? '');
 
                                 if (user['role'] == 'teacher') {
                                   Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const TeacherScreen()));
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const TeacherScreen()),
+                                  );
                                 } else if (user['role'] == 'student') {
                                   Navigator.pushReplacement(
-                                      context,
-                                      MaterialPageRoute(builder: (context) => const HomeScreen()));
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const HomeScreen()),
+                                  );
                                 }
                               } else {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   const SnackBar(content: Text('Email hoặc mật khẩu không đúng')),
                                 );
                               }
-
                             }
                           },
 
 
-                          child: const Text("Đăng nhập"),
+
+          child: const Text("Đăng nhập"),
                         ),
                       ),
                       const SizedBox(width: 10),
@@ -379,7 +431,7 @@ class _LoginScreenState extends State<LoginScreen> with TickerProviderStateMixin
                       AnimatedBuilder(
                         animation: _tiltController,
                         builder: (context, child) {
-                          final text = "student-mobile-web.azota.vn";
+                          final text = "student-mobile-web.tracnghiem.vn";
                           return Row(
                             mainAxisSize: MainAxisSize.min,
                             children: List.generate(text.length, (index) {

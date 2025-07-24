@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'home_screen.dart';
-import '../db/user_database.dart';
 import 'login_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'dart:math' as math;
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -81,30 +83,46 @@ class _RegisterScreenState extends State<RegisterScreen> with TickerProviderStat
 
   Future<void> registerUser() async {
     if (_formKey.currentState!.validate()) {
+      final uri = Uri.parse('http://172.16.1.243:5162/Auth/register');
+      final headers = {'Content-Type': 'application/json'};
+      final body = jsonEncode({
+        'fullName': fullNameController.text.trim(),
+        'email': emailController.text.trim(),
+        'password': passwordController.text.trim(),
+        'role': _selectedRole,
+        'createdAt': DateTime.now().toIso8601String(),
+        'gender': null,
+        'phone': null,
+        'avatar': null,
+      });
+
       try {
-        await AppDatabase.insertUser(
-          fullNameController.text.trim(),
-          emailController.text.trim(),
-          passwordController.text.trim(),
-          _selectedRole,
-          DateTime.now().toIso8601String(), // thêm thời gian tạo
-        );
+        final response = await http.post(uri, headers: headers, body: body);
 
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Đăng ký thành công!")),
-        );
+        if (response.statusCode == 200) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("Đăng ký thành công!")),
+          );
 
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
-        );
+          Navigator.pushReplacement(
+            context,
+            MaterialPageRoute(builder: (context) => const LoginScreen()),
+          );
+        } else {
+          final message = jsonDecode(response.body);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text("Lỗi: $message")),
+          );
+        }
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Lỗi: ${e.toString()}")),
+          SnackBar(content: Text("Lỗi kết nối: ${e.toString()}")),
         );
       }
     }
   }
+
+
 
   @override
   Widget build(BuildContext context) {

@@ -10,6 +10,28 @@ class AppDatabase {
     return _database!;
   }
 
+  // hàm xóa
+  static Future<int> deleteUserByEmail(String email) async {
+    final db = await database;
+    final rowsDeleted = await db.delete(
+      'users',
+      where: 'email = ?',
+      whereArgs: [email],
+    );
+    print("Đã xoá $rowsDeleted dòng.");
+    return rowsDeleted;
+  }
+
+  static Future<void> printAllUsers() async {
+    final db = await database;
+    final users = await db.query('users');
+    print("Danh sách users hiện tại:");
+    for (var user in users) {
+      print(user);
+    }
+  }
+
+
   // hàm kiểm tra trùng mã đề
   static Future<bool> examCodeExists(String code) async {
     final db = await database;

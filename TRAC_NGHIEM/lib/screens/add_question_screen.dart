@@ -500,10 +500,22 @@
                     hintText: "1. Câu hỏi?\nA. Đáp án A\nB. Đáp án B\nC. Đáp án C\nD. Đáp án D\nĐáp án đúng: A",
                     border: OutlineInputBorder(),
                   ),
+                  validator: (value) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Vui lòng nhập nội dung';
+                    }
+                    return null;
+                  },
                 ),
+
                 const SizedBox(height: 10),
                 ElevatedButton.icon(
-                  onPressed: _parseAndAddStructuredQuestions,
+                  onPressed: () {
+                    if (_formKey.currentState!.validate()) {
+                      _parseAndAddStructuredQuestions();
+                    }
+                  },
+
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.teal,
                     foregroundColor: Colors.white,
@@ -588,7 +600,7 @@
                   width: double.infinity,
                   child: ElevatedButton.icon(
                     onPressed: _finishExam,
-                    icon: const Icon(Icons.task_alt_rounded, size: 24), // biểu tượng hiện đại hơn
+                    icon: const Icon(Icons.task_alt_rounded, size: 24),
                     label: const Text(
                       "Hoàn tất tạo bài thi",
                       style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
